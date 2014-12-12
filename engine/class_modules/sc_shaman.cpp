@@ -3603,7 +3603,7 @@ struct ascendance_t : public shaman_spell_t
 struct healing_surge_t : public shaman_heal_t
 {
   healing_surge_t( shaman_t* player, const std::string& options_str ) :
-    shaman_heal_t( player, player -> find_class_spell( "Healing Surge" ), options_str )
+    shaman_heal_t( "healing surge", player, player -> find_class_spell( "Healing Surge" ), options_str )
   {
     resurgence_gain = 0.6 * p() -> spell.resurgence -> effectN( 1 ).average( player ) * p() -> spec.resurgence -> effectN( 1 ).percent();
   }
@@ -3627,7 +3627,7 @@ struct healing_surge_t : public shaman_heal_t
 struct healing_wave_t : public shaman_heal_t
 {
   healing_wave_t( shaman_t* player, const std::string& options_str ) :
-    shaman_heal_t( player, player -> find_specialization_spell( "Healing Wave" ), options_str )
+    shaman_heal_t( "healing wave", player, player -> find_specialization_spell( "Healing Wave" ), options_str )
   {
     resurgence_gain = p() -> spell.resurgence -> effectN( 1 ).average( player ) * p() -> spec.resurgence -> effectN( 1 ).percent();
   }
@@ -3651,7 +3651,7 @@ struct healing_wave_t : public shaman_heal_t
 struct greater_healing_wave_t : public shaman_heal_t
 {
   greater_healing_wave_t( shaman_t* player, const std::string& options_str ) :
-    shaman_heal_t( player, player -> find_specialization_spell( "Greater Healing Wave" ), options_str )
+    shaman_heal_t( "Greater Healing Wave", player, player -> find_specialization_spell( "Greater Healing Wave" ), options_str )
   {
     resurgence_gain = p() -> spell.resurgence -> effectN( 1 ).average( player ) * p() -> spec.resurgence -> effectN( 1 ).percent();
   }
@@ -3675,7 +3675,7 @@ struct greater_healing_wave_t : public shaman_heal_t
 struct riptide_t : public shaman_heal_t
 {
   riptide_t( shaman_t* player, const std::string& options_str ) :
-    shaman_heal_t( player, player -> find_specialization_spell( "Riptide" ), options_str )
+    shaman_heal_t( "Riptide", player, player -> find_specialization_spell( "Riptide" ), options_str )
   {
     resurgence_gain = 0.6 * p() -> spell.resurgence -> effectN( 1 ).average( player ) * p() -> spec.resurgence -> effectN( 1 ).percent();
   }
@@ -3686,7 +3686,7 @@ struct riptide_t : public shaman_heal_t
 struct chain_heal_t : public shaman_heal_t
 {
   chain_heal_t( shaman_t* player, const std::string& options_str ) :
-    shaman_heal_t( player, player -> find_class_spell( "Chain Heal" ), options_str )
+    shaman_heal_t( "Chain Heal", player, player -> find_class_spell( "Chain Heal" ), options_str )
   {
     resurgence_gain = 0.333 * p() -> spell.resurgence -> effectN( 1 ).average( player ) * p() -> spec.resurgence -> effectN( 1 ).percent();
   }
@@ -3718,7 +3718,7 @@ struct healing_rain_t : public shaman_heal_t
   };
 
   healing_rain_t( shaman_t* player, const std::string& options_str ) :
-    shaman_heal_t( player, player -> find_class_spell( "Healing Rain" ), options_str )
+    shaman_heal_t( "Healing Rain", player, player -> find_class_spell( "Healing Rain" ), options_str )
   {
     base_tick_time = data().effectN( 2 ).period();
     dot_duration = data().duration();
@@ -5119,11 +5119,14 @@ void shaman_t::create_buffs()
   buff.lava_surge              = buff_creator_t( this, "lava_surge",        spec.lava_surge )
                                  .activated( false )
                                  .chance( 1.0 ); // Proc chance is handled externally
-  buff.lightning_shield        = buff_creator_t( this, "lightning_shield", find_class_spell( "Lightning Shield" ) )
-                                 .max_stack( ( specialization() == SHAMAN_ELEMENTAL )
-                                             ? static_cast< int >( spec.fulmination -> effectN( 1 ).base_value() + perk.improved_lightning_shield -> effectN( 1 ).base_value() )
-                                             : find_class_spell( "Lightning Shield" ) -> initial_stacks() )
-                                 .cd( timespan_t::zero() );
+  if ( specialization() != SHAMAN_RESTORATION )
+  {
+      buff.lightning_shield        = buff_creator_t( this, "lightning_shield", find_class_spell( "Lightning Shield" ) )
+                                     .max_stack( ( specialization() == SHAMAN_ELEMENTAL )
+                                                 ? static_cast< int >( spec.fulmination -> effectN( 1 ).base_value() + perk.improved_lightning_shield -> effectN( 1 ).base_value() )
+                                                 : find_class_spell( "Lightning Shield" ) -> initial_stacks() )
+                                     .cd( timespan_t::zero() );
+  }
   buff.maelstrom_weapon        = new maelstrom_weapon_buff_t( this );
   buff.shamanistic_rage        = buff_creator_t( this, "shamanistic_rage",  spec.shamanistic_rage );
   buff.elemental_fusion        = buff_creator_t( this, "elemental_fusion", find_spell( 157174 ) )
@@ -5236,7 +5239,8 @@ void shaman_t::init_procs()
 void shaman_t::init_action_list()
 {
   if ( ! ( primary_role() == ROLE_ATTACK && specialization() == SHAMAN_ENHANCEMENT ) &&
-       ! ( primary_role() == ROLE_SPELL  && specialization() == SHAMAN_ELEMENTAL   ) )
+       ! ( primary_role() == ROLE_SPELL  && specialization() == SHAMAN_ELEMENTAL   ) &&
+       ! ( specialization() == SHAMAN_RESTORATION   ) )
   {
     if ( ! quiet )
       sim -> errorf( "Player %s's role (%s) or spec(%s) isn't supported yet.",
@@ -5254,14 +5258,6 @@ void shaman_t::init_action_list()
   }
 
   // Restoration isn't supported atm
-  if ( specialization() == SHAMAN_RESTORATION && primary_role() == ROLE_HEAL )
-  {
-    if ( ! quiet )
-      sim -> errorf( "Restoration Shaman healing for player %s is not currently supported.", name() );
-
-    quiet = true;
-    return;
-  }
 
   if ( ! action_list_str.empty() )
   {
@@ -5510,6 +5506,12 @@ void shaman_t::init_action_list()
     aoe -> add_action( this, "Searing Totem", "if=(!talent.liquid_magma.enabled&!totem.fire.active)|(talent.liquid_magma.enabled&pet.searing_totem.remains<=20&!pet.fire_elemental_totem.active&!buff.liquid_magma.up)" );
     aoe -> add_action( this, "Chain Lightning", "if=active_enemies>=2" );
     aoe -> add_action( this, "Lightning Bolt" );
+  }
+  else if ( specialization() == SHAMAN_RESTORATION )
+  {
+    def -> add_action( "Riptide" );
+    def -> add_action( "Healing Surge", "if=target.health.pct<20" );
+    def -> add_action( "Healing Wave" );
   }
   else if ( primary_role() == ROLE_SPELL )
   {
@@ -5860,14 +5862,11 @@ void shaman_t::merge( player_t& other )
 role_e shaman_t::primary_role() const
 {
   if ( player_t::primary_role() == ROLE_HEAL )
-    return ROLE_HYBRID;//To prevent spawning healing_target, as there is no support for healing.
+    return ROLE_HEAL;//To prevent spawning healing_target, as there is no support for healing.
 
   if ( specialization() == SHAMAN_RESTORATION )
   {
-    if ( player_t::primary_role() == ROLE_DPS || player_t::primary_role() == ROLE_SPELL )
-      return ROLE_SPELL;
-
-    return ROLE_SPELL;
+    return ROLE_HEAL;
   }
 
   else if ( specialization() == SHAMAN_ENHANCEMENT )
